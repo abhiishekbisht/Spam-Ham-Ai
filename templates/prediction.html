@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpamHam AI — Prediction Console</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2310b981%22 stroke-width=%222%22><path d=%22M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z%22/></svg>">
+</head>
+<body>
+
+  <div class="bg-ambient-grid"></div>
+
+  <div class="app-viewport">
+
+    <header class="app-navbar">
+      <a href="/" class="brand-container">
+        <div class="brand-logo-badge">
+          <svg class="brand-logo-svg" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="40" height="40" rx="9" fill="url(#brand-grad)"/>
+            <path d="M20 8L10 13V20C10 26.2 14.3 31.9 20 33.3C25.7 31.9 30 26.2 30 20V13L20 8Z" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 20L19 23L25 17" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="brand-grad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#10b981"/>
+                <stop offset="1" stop-color="#06b6d4"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-name">SpamHam <span class="accent-text">Security</span></div>
+      </a>
+      <div style="display: flex; gap: 0.5rem;">
+        <a href="/" class="btn-action-ghost" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; text-decoration: none;">← Console</a>
+      </div>
+    </header>
+
+    <div class="console-panel" style="max-width: 620px; margin: 2rem auto;">
+      {% if context is true %}
+        <div class="master-verdict-card {% if prediction == 1 %}theme-spam{% else %}theme-ham{% endif %}" style="margin-bottom: 1.5rem;">
+          <div class="pill-verdict {% if prediction == 1 %}spam{% else %}ham{% endif %}">
+            {% if prediction == 1 %}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              SPAM DETECTED
+            {% else %}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              SAFE HAM
+            {% endif %}
+          </div>
+          {% if detailed_result %}
+            <div class="gauge-number" style="font-size: 2.2rem; margin-top: 0.5rem;">{{ detailed_result.confidence_percent }}%</div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-top: 0.25rem;">
+              {{ detailed_result.risk_level }} • Confidence Score
+            </div>
+          {% endif %}
+        </div>
+
+        {% if input_text %}
+          <div class="highlighted-inspector-text" style="margin-bottom: 1.5rem;">
+            <div style="font-size: 0.725rem; color: var(--text-tertiary); margin-bottom: 0.25rem; text-transform: uppercase;">Analyzed Message Payload:</div>
+            <div>"{{ input_text }}"</div>
+          </div>
+        {% endif %}
+
+        <div style="display: flex; justify-content: center; gap: 0.75rem;">
+          <a href="/predict" class="btn-action-primary" style="text-decoration: none;">Analyze Another Payload</a>
+          <a href="/" class="btn-action-ghost" style="text-decoration: none;">Home Dashboard</a>
+        </div>
+
+      {% else %}
+
+        <div class="console-title-text" style="margin-bottom: 0.4rem;">Spam & Phishing Payload Inspection</div>
+        <p style="font-size: 0.825rem; color: var(--text-tertiary); margin-bottom: 1.5rem;">Submit text string below for machine learning classification.</p>
+
+        <form method="POST" action="/predict">
+          <div class="editor-wrapper">
+            <textarea name="input_text" class="text-editor" placeholder="Paste or type message text here..." required></textarea>
+          </div>
+
+          <div style="display: flex; gap: 0.75rem;">
+            <button type="submit" class="btn-action-primary">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Submit Inference
+            </button>
+            <a href="/" class="btn-action-ghost" style="text-decoration: none;">Cancel</a>
+          </div>
+        </form>
+
+      {% endif %}
+    </div>
+
+    <footer class="footer-bar">
+      <p>SpamHam AI Enterprise Platform • <a href="/">Return to Live Console</a></p>
+    </footer>
+
+  </div>
+
+</body>
+</html>

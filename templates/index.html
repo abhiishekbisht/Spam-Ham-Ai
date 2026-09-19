@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SpamHam AI — Threat Intelligence Console</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              500: '#10b981',
+              600: '#059669',
+              900: '#064e3b',
+            },
+            spam: {
+              500: '#f43f5e',
+              600: '#e11d48',
+              900: '#881337',
+            },
+            dark: {
+              app: '#08090d',
+              surface: '#0d0f17',
+              card: '#121520',
+              border: 'rgba(255,255,255,0.08)',
+            }
+          },
+          fontFamily: {
+            display: ['Space Grotesk', 'sans-serif'],
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+
+  <!-- React 18 & Babel CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-[#08090d] text-slate-100 font-sans antialiased selection:bg-emerald-500/20 selection:text-emerald-400 min-h-screen pb-20 md:pb-8">
+
+  <div id="root"></div>
+
+{% raw %}
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Presets
+    const PRESETS = [
+      { id: 'spam1', label: 'Promo Spam', icon: 'gift', text: 'WINNER! You have been selected to claim a $1,000 Walmart Gift Card! Click http://bit.ly/claim-prize now to claim your cash before it expires!' },
+      { id: 'phishing', label: 'Urgent Phishing', icon: 'shield-alert', text: 'URGENT BANK SECURITY ALERT: Your credit card account has been temporarily locked due to suspicious activity. Verify your password now at www.secure-bank-login.com' },
+      { id: 'ham1', label: 'Work Sync', icon: 'briefcase', text: 'Hi Sarah, can we move our project sync meeting to 3 PM tomorrow? Let me know if that time works for your schedule.' },
+      { id: 'ham2', label: 'Casual Chat', icon: 'message-square', text: 'Hey! Are we still on for coffee and dinner tonight around 7pm near downtown?' }
+    ];
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('sandbox');
+      const [payloadText, setPayloadText] = useState('');
+      const [isLoading, setIsLoading] = useState(false);
+      const [result, setResult] = useState(null);
+      const [isCmdOpen, setIsCmdOpen] = useState(false);
+      const [cmdFilter, setCmdFilter] = useState('');
+      const [benchmarks, setBenchmarks] = useState(null);
+      const [csvReport, setCsvReport] = useState(null);
+
+      const editorRef = useRef(null);
+      const debounceRef = useRef(null);
+
+      // Debounced live typing inference
+      const handleTextChange = (e) => {
+        const val = e.target.value;
+        setPayloadText(val);
+        clearTimeout(debounceRef.current);
+
+        if (val.trim().length > 4) {
+          debounceRef.current = setTimeout(() => {
+            runInference(val);
+          }, 350);
+        } else if (val.trim().length === 0) {
+          setResult(null);
+        }
+      };
+
+      // Inference API call
+      const runInference = async (textToAnalyze) => {
+        const targetText = textToAnalyze !== undefined ? textToAnalyze : payloadText;
+        if (!targetText.trim()) return;
+
+        setIsLoading(true);
+        try {
+          const res = await fetch('/api/v1/predict', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: targetText.trim() })
+          });
+          const data = await res.json();
+          setResult(data);
+        } catch (err) {
+          console.error('Inference error:', err);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      // Preset click handler
+      const handlePresetClick = (preset) => {
+        setPayloadText(preset.text);
+        runInference(preset.text);
+      };
+
+      // Clear handler
+      const handleClear = () => {
+        setPayloadText('');
+        setResult(null);
+        if (editorRef.current) editorRef.current.focus();
+      };
+
+      // Load benchmarks on mount
+      useEffect(() => {
+        fetch('/api/v1/model-info')
+          .then(res => res.json())
+          .then(data => setBenchmarks(data))
+          .catch(err => console.error(err));
+      }, []);
+
+      // Keyboard shortcuts
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            setIsCmdOpen(prev => !prev);
+          } else if (e.key === 'Escape') {
+            setIsCmdOpen(false);
+          }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+      }, []);
+
+      // Render icons after DOM updates
+      useEffect(() => {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      });
+
+      // CSV upload handler
+      const handleCsvUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const fd = new FormData();
+        fd.append('file', file);
+
+        try {
+          const res = await fetch('/api/v1/upload-csv', { method: 'POST', body: fd });
+          const data = await res.json();
+          setCsvReport(data);
+        } catch (err) {
+          alert('CSV Upload failed: ' + err);
+        }
+      };
+
+      // Calculate ratios
+      const confidence = result ? result.confidence_percent : 50;
+      const isSpam = result ? result.is_spam : false;
+      const spamRatio = result ? (isSpam ? confidence : 100 - confidence) : 50;
+      const hamRatio = 100 - spamRatio;
+
+      return (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6">
+          
+          {/* NAVBAR */}
+          <header className="flex items-center justify-between p-3.5 sm:p-4 bg-[#121520]/90 backdrop-blur-xl border border-white/10 rounded-2xl mb-6 shadow-2xl">
+            <a href="/" className="flex items-center gap-3 group text-decoration-none">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 p-0.5 shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+                <div className="w-full h-full bg-[#0d0f17] rounded-[10px] flex items-center justify-center">
+                  <i data-lucide="shield-check" className="w-5 h-5 text-emerald-400"></i>
+                </div>
+              </div>
+              <div>
+                <div className="font-display font-bold text-base sm:text-lg tracking-tight text-white flex items-center gap-2">
+                  SpamHam <span className="text-emerald-400">Security</span>
+                  <span className="text-[10px] font-mono font-semibold px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded uppercase">PRO ENGINE</span>
+                </div>
+              </div>
+            </a>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* Command Palette Trigger Button */}
+              <button 
+                onClick={() => setIsCmdOpen(true)}
+                className="hidden sm:flex items-center gap-2 px-3 py-2 min-h-[44px] bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs text-slate-300 transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <i data-lucide="search" className="w-3.5 h-3.5 text-slate-400"></i>
+                <span>Quick commands</span>
+                <kbd className="font-mono text-[10px] px-1.5 py-0.5 bg-white/10 rounded text-slate-300">⌘K</kbd>
+              </button>
+
+              <div className="flex items-center gap-2 px-3 py-2 min-h-[44px] bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-semibold text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#10b981]"></span>
+                <span className="hidden xs:inline">Engine Live</span>
+              </div>
+
+              <a 
+                href="/docs" 
+                target="_blank" 
+                className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-semibold text-slate-200 transition-all hover:scale-[1.02]"
+              >
+                <i data-lucide="zap" className="w-3.5 h-3.5 text-cyan-400"></i>
+                <span className="hidden sm:inline">Docs</span>
+              </a>
+            </div>
+          </header>
+
+          {/* TAB NAVIGATION */}
+          <div className="flex items-center gap-1 p-1.5 bg-[#121520]/80 border border-white/10 rounded-2xl mb-6 w-full sm:w-fit overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('sandbox')}
+              className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'sandbox' 
+                  ? 'bg-emerald-500/15 text-white border border-emerald-500/40 shadow-lg shadow-emerald-500/10' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+            >
+              <i data-lucide="terminal" className="w-4 h-4"></i>
+              Real-Time Sandbox
+            </button>
+            <button
+              onClick={() => setActiveTab('batch')}
+              className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'batch' 
+                  ? 'bg-emerald-500/15 text-white border border-emerald-500/40 shadow-lg shadow-emerald-500/10' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+            >
+              <i data-lucide="file-spreadsheet" className="w-4 h-4"></i>
+              CSV Inspector
+            </button>
+            <button
+              onClick={() => setActiveTab('telemetry')}
+              className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                activeTab === 'telemetry' 
+                  ? 'bg-emerald-500/15 text-white border border-emerald-500/40 shadow-lg shadow-emerald-500/10' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+            >
+              <i data-lucide="bar-chart-3" className="w-4 h-4"></i>
+              Model Benchmarks
+            </button>
+          </div>
+
+          {/* TAB 1: SANDBOX */}
+          {activeTab === 'sandbox' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              
+              {/* LEFT COLUMN: EDITOR & SPECTRUM */}
+              <div className="lg:col-span-7 bg-[#121520]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-5 sm:p-6 shadow-2xl">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="font-display font-bold text-base sm:text-lg text-white flex items-center gap-2">
+                    <i data-lucide="message-square-code" className="w-5 h-5 text-emerald-400"></i>
+                    Message Payload Sandbox
+                  </div>
+                  <span className="text-xs text-slate-400">Debounced Live Analysis</span>
+                </div>
+
+                {/* Touch Presets Scroll */}
+                <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-2 scrollbar-none">
+                  <span className="text-xs font-semibold text-slate-400 whitespace-nowrap mr-1">Presets:</span>
+                  {PRESETS.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => handlePresetClick(p)}
+                      className="flex items-center gap-1.5 px-3 py-2 min-h-[40px] bg-white/5 hover:bg-emerald-500/15 hover:border-emerald-500/40 border border-white/10 rounded-full text-xs font-medium text-slate-300 hover:text-white transition-all whitespace-nowrap active:scale-95"
+                    >
+                      <i data-lucide={p.icon} className="w-3.5 h-3.5 text-emerald-400"></i>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Textarea */}
+                <div className="relative mb-4">
+                  <textarea
+                    ref={editorRef}
+                    value={payloadText}
+                    onChange={handleTextChange}
+                    placeholder="Paste or type email text, SMS message, or chat payload to inspect for spam or phishing threat indicators..."
+                    className="w-full min-h-[180px] sm:min-h-[220px] p-4 bg-[#090b10] border border-white/10 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 rounded-2xl text-sm sm:text-base text-slate-100 placeholder-slate-500 outline-none transition-all resize-y leading-relaxed"
+                  ></textarea>
+                </div>
+
+                {/* Live Heatmap Ratio Bar */}
+                <div className="mb-5">
+                  <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden flex">
+                    <div className="bg-emerald-500 h-full transition-all duration-500" style={{ width: `${hamRatio}%` }}></div>
+                    <div className="bg-rose-500 h-full transition-all duration-500" style={{ width: `${spamRatio}%` }}></div>
+                  </div>
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mt-1.5">
+                    <span>SAFE HAM: {Math.round(hamRatio)}%</span>
+                    <span>SPAM THREAT: {Math.round(spamRatio)}%</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => runInference()}
+                    disabled={isLoading}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 min-h-[46px] bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-emerald-500/25 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+                  >
+                    {isLoading ? (
+                      <i data-lucide="loader-2" className="w-4 h-4 animate-spin"></i>
+                    ) : (
+                      <i data-lucide="search" className="w-4 h-4"></i>
+                    )}
+                    <span>{isLoading ? 'Analyzing...' : 'Analyze Payload'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleClear}
+                    className="px-4 py-3 min-h-[46px] bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white font-semibold text-sm rounded-xl transition-all active:scale-95"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {/* RIGHT COLUMN: VERDICT & INSPECTOR */}
+              <div className="lg:col-span-5 space-y-6">
+                
+                {/* Verdict Master Box */}
+                <div className={`p-6 rounded-3xl border text-center transition-all ${
+                  isSpam 
+                    ? 'bg-gradient-to-b from-rose-500/10 via-[#121520] to-[#121520] border-rose-500/40 shadow-2xl shadow-rose-500/10'
+                    : 'bg-gradient-to-b from-emerald-500/10 via-[#121520] to-[#121520] border-emerald-500/40 shadow-2xl shadow-emerald-500/10'
+                }`}>
+                  <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs sm:text-sm font-extrabold uppercase tracking-wider ${
+                    isSpam ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-slate-950'
+                  }`}>
+                    <i data-lucide={isSpam ? 'alert-triangle' : 'shield-check'} className="w-4 h-4"></i>
+                    {isSpam ? 'SPAM DETECTED' : 'SAFE HAM'}
+                  </div>
+
+                  {/* Confidence SVG Gauge */}
+                  <div className="relative w-36 h-36 mx-auto my-4 flex items-center justify-center">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+                      <circle cx="60" cy="60" r="50" className="stroke-white/10 fill-none stroke-[8]"></circle>
+                      <circle 
+                        cx="60" cy="60" r="50" 
+                        className={`fill-none stroke-[8] stroke-linecap-round transition-all duration-700 ${isSpam ? 'stroke-rose-500' : 'stroke-emerald-400'}`}
+                        strokeDasharray="314.15"
+                        strokeDashoffset={314.15 - (314.15 * (confidence / 100))}
+                      ></circle>
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="font-display font-extrabold text-3xl text-white tracking-tight">{confidence}%</span>
+                      <span className="text-[10px] font-mono uppercase text-slate-400 tracking-wider">Confidence</span>
+                    </div>
+                  </div>
+
+                  <div className="text-xs font-semibold text-slate-300">
+                    {result ? `${result.risk_level} • Threat Probability Calculated` : 'Ready for Payload Input'}
+                  </div>
+                </div>
+
+                {/* Threat Inspector */}
+                <div className="bg-[#121520]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-5 sm:p-6 shadow-2xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-display font-bold text-sm text-white flex items-center gap-2">
+                      <i data-lucide="file-search" className="w-4 h-4 text-emerald-400"></i>
+                      Threat Token Inspector
+                    </div>
+                  </div>
+
+                  {/* Inspector Preview Box */}
+                  <div className="p-3.5 bg-[#090b10] border border-white/10 rounded-xl mb-4 text-xs sm:text-sm leading-relaxed text-slate-200 min-h-[70px]">
+                    {payloadText ? (
+                      <div>
+                        {payloadText.split(/(\s+)/).map((w, idx) => {
+                          const clean = w.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                          const isFlagged = result && result.flagged_keywords && result.flagged_keywords.some(k => k.toLowerCase() === clean);
+                          if (isFlagged) {
+                            return (
+                              <mark key={idx} className="bg-rose-500/20 text-rose-400 border border-rose-500/40 rounded px-1 py-0.5 font-mono text-xs font-semibold mr-0.5">
+                                {w}
+                              </mark>
+                            );
+                          }
+                          return w;
+                        })}
+                      </div>
+                    ) : (
+                      <span className="text-slate-500 italic">Inspector payload preview...</span>
+                    )}
+                  </div>
+
+                  {/* Telemetry Stats Grid */}
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div className="p-2 bg-white/5 border border-white/5 rounded-xl">
+                      <div className="font-mono font-bold text-sm text-white">{result ? result.text_stats.char_count : 0}</div>
+                      <div className="text-[10px] text-slate-400 uppercase mt-0.5">Chars</div>
+                    </div>
+                    <div className="p-2 bg-white/5 border border-white/5 rounded-xl">
+                      <div className="font-mono font-bold text-sm text-white">{result ? result.text_stats.word_count : 0}</div>
+                      <div className="text-[10px] text-slate-400 uppercase mt-0.5">Words</div>
+                    </div>
+                    <div className="p-2 bg-white/5 border border-white/5 rounded-xl">
+                      <div className="font-mono font-bold text-sm text-white">{result ? `${result.text_stats.uppercase_pct}%` : '0%'}</div>
+                      <div className="text-[10px] text-slate-400 uppercase mt-0.5">Caps %</div>
+                    </div>
+                    <div className="p-2 bg-white/5 border border-white/5 rounded-xl">
+                      <div className="font-mono font-bold text-sm text-white">{result ? result.text_stats.url_count : 0}</div>
+                      <div className="text-[10px] text-slate-400 uppercase mt-0.5">URLs</div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 2: BATCH CSV INSPECTOR */}
+          {activeTab === 'batch' && (
+            <div className="bg-[#121520]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl">
+              <div className="font-display font-bold text-lg text-white mb-2">Batch Dataset Threat Inspector</div>
+              <p className="text-xs sm:text-sm text-slate-400 mb-6">Upload CSV datasets to execute bulk threat classification in parallel.</p>
+
+              <div 
+                onClick={() => document.getElementById('csvInput').click()}
+                className="border-2 border-dashed border-white/15 hover:border-emerald-500/50 bg-white/5 p-8 sm:p-12 rounded-2xl text-center cursor-pointer transition-all hover:scale-[1.01] active:scale-95"
+              >
+                <i data-lucide="upload-cloud" className="w-10 h-10 text-emerald-400 mx-auto mb-3"></i>
+                <div className="font-bold text-base text-white">Click or Drag & Drop CSV File</div>
+                <div className="text-xs text-slate-400 mt-1">Supports datasets containing message text columns</div>
+                <input type="file" id="csvInput" accept=".csv" className="hidden" onChange={handleCsvUpload} />
+              </div>
+
+              {csvReport && (
+                <div className="mt-8 space-y-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                    <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                      <div className="font-mono font-bold text-xl text-white">{csvReport.total_processed}</div>
+                      <div className="text-xs text-slate-400 uppercase mt-1">Processed</div>
+                    </div>
+                    <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                      <div className="font-mono font-bold text-xl text-rose-400">{csvReport.spam_count}</div>
+                      <div className="text-xs text-slate-400 uppercase mt-1">Spam Flagged</div>
+                    </div>
+                    <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                      <div className="font-mono font-bold text-xl text-emerald-400">{csvReport.ham_count}</div>
+                      <div className="text-xs text-slate-400 uppercase mt-1">Verified Ham</div>
+                    </div>
+                    <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                      <div className="font-mono font-bold text-xl text-amber-400">{csvReport.spam_percentage}%</div>
+                      <div className="text-xs text-slate-400 uppercase mt-1">Spam Rate</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: BENCHMARKS */}
+          {activeTab === 'telemetry' && (
+            <div className="bg-[#121520]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="font-display font-bold text-lg text-white">Model Architecture & Cross-Validation Benchmarks</div>
+                  <p className="text-xs text-slate-400 mt-1">Evaluated on holdout test set</p>
+                </div>
+              </div>
+
+              {benchmarks && benchmarks.metrics && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                    <div className="font-mono font-bold text-2xl text-emerald-400">{(benchmarks.metrics.accuracy * 100).toFixed(1)}%</div>
+                    <div className="text-xs text-slate-400 uppercase mt-1">Accuracy</div>
+                  </div>
+                  <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                    <div className="font-mono font-bold text-2xl text-emerald-400">{(benchmarks.metrics.f1_score * 100).toFixed(1)}%</div>
+                    <div className="text-xs text-slate-400 uppercase mt-1">F1 Score</div>
+                  </div>
+                  <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                    <div className="font-mono font-bold text-2xl text-cyan-400">{(benchmarks.metrics.precision * 100).toFixed(1)}%</div>
+                    <div className="text-xs text-slate-400 uppercase mt-1">Precision</div>
+                  </div>
+                  <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                    <div className="font-mono font-bold text-2xl text-cyan-400">{(benchmarks.metrics.recall * 100).toFixed(1)}%</div>
+                    <div className="text-xs text-slate-400 uppercase mt-1">Recall</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* FLOATING MOBILE ACTION DOCK (< 768px) */}
+          <div className="fixed bottom-0 left-0 right-0 sm:hidden bg-[#0d0f17]/95 backdrop-blur-xl border-t border-white/10 p-3 z-50 flex items-center justify-around">
+            <button 
+              onClick={() => runInference()}
+              className="flex flex-col items-center gap-1 text-[11px] font-semibold text-emerald-400 active:scale-95"
+            >
+              <i data-lucide="play" className="w-5 h-5"></i>
+              <span>Analyze</span>
+            </button>
+
+            <button 
+              onClick={() => handlePresetClick(PRESETS[0])}
+              className="flex flex-col items-center gap-1 text-[11px] font-semibold text-slate-300 active:scale-95"
+            >
+              <i data-lucide="gift" className="w-5 h-5"></i>
+              <span>Preset</span>
+            </button>
+
+            <button 
+              onClick={() => setIsCmdOpen(true)}
+              className="flex flex-col items-center gap-1 text-[11px] font-semibold text-slate-300 active:scale-95"
+            >
+              <i data-lucide="command" className="w-5 h-5"></i>
+              <span>Cmd ⌘K</span>
+            </button>
+
+            <button 
+              onClick={handleClear}
+              className="flex flex-col items-center gap-1 text-[11px] font-semibold text-slate-300 active:scale-95"
+            >
+              <i data-lucide="trash-2" className="w-5 h-5"></i>
+              <span>Clear</span>
+            </button>
+          </div>
+
+          {/* COMMAND PALETTE MODAL / MOBILE DRAWER */}
+          {isCmdOpen && (
+            <div 
+              onClick={() => setIsCmdOpen(false)}
+              className="fixed inset-0 bg-black/80 backdrop-blur-md z-[999] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+            >
+              <div 
+                onClick={e => e.stopPropagation()}
+                className="w-full sm:max-w-xl bg-[#0f1117] border border-white/15 rounded-t-3xl sm:rounded-2xl overflow-hidden shadow-2xl"
+              >
+                <div className="flex items-center gap-3 p-4 border-b border-white/10">
+                  <i data-lucide="search" className="w-5 h-5 text-slate-400"></i>
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Type a command or shortcut..."
+                    value={cmdFilter}
+                    onChange={e => setCmdFilter(e.target.value)}
+                    className="w-full bg-transparent text-white outline-none text-sm placeholder-slate-500"
+                  />
+                  <kbd className="text-[10px] font-mono px-2 py-0.5 bg-white/10 rounded text-slate-400">ESC</kbd>
+                </div>
+                <div className="p-2 max-h-72 overflow-y-auto space-y-1">
+                  <div 
+                    onClick={() => { handlePresetClick(PRESETS[0]); setIsCmdOpen(false); }}
+                    className="flex items-center justify-between p-3 rounded-xl hover:bg-emerald-500/15 text-slate-200 text-sm cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2"><i data-lucide="gift" className="w-4 h-4 text-emerald-400"></i> Promo Spam Sample</span>
+                    <span className="text-xs font-mono text-slate-500">Sample</span>
+                  </div>
+                  <div 
+                    onClick={() => { handlePresetClick(PRESETS[1]); setIsCmdOpen(false); }}
+                    className="flex items-center justify-between p-3 rounded-xl hover:bg-emerald-500/15 text-slate-200 text-sm cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2"><i data-lucide="shield-alert" className="w-4 h-4 text-rose-400"></i> Urgent Phishing Sample</span>
+                    <span className="text-xs font-mono text-slate-500">Sample</span>
+                  </div>
+                  <div 
+                    onClick={() => { setActiveTab('sandbox'); setIsCmdOpen(false); }}
+                    className="flex items-center justify-between p-3 rounded-xl hover:bg-emerald-500/15 text-slate-200 text-sm cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2"><i data-lucide="terminal" className="w-4 h-4 text-cyan-400"></i> Real-Time Sandbox</span>
+                    <span className="text-xs font-mono text-slate-500">Tab 1</span>
+                  </div>
+                  <div 
+                    onClick={() => { setActiveTab('batch'); setIsCmdOpen(false); }}
+                    className="flex items-center justify-between p-3 rounded-xl hover:bg-emerald-500/15 text-slate-200 text-sm cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2"><i data-lucide="file-spreadsheet" className="w-4 h-4 text-amber-400"></i> CSV Inspector</span>
+                    <span className="text-xs font-mono text-slate-500">Tab 2</span>
+                  </div>
+                  <div 
+                    onClick={() => { setActiveTab('telemetry'); setIsCmdOpen(false); }}
+                    className="flex items-center justify-between p-3 rounded-xl hover:bg-emerald-500/15 text-slate-200 text-sm cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2"><i data-lucide="bar-chart-3" className="w-4 h-4 text-emerald-400"></i> Model Benchmarks</span>
+                    <span className="text-xs font-mono text-slate-500">Tab 3</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* FOOTER */}
+          <footer className="mt-12 text-center text-xs text-slate-500 pt-6 border-t border-white/5">
+            <p>SpamHam AI Enterprise Platform • Powered by Scikit-Learn & FastAPI • <a href="/docs" target="_blank" className="text-emerald-400 hover:underline">OpenAPI Docs</a></p>
+          </footer>
+
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+{% endraw %}
+
+</body>
+</html>

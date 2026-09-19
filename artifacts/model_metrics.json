@@ -1,0 +1,54 @@
+{
+  "model_name": "LogisticRegression",
+  "dataset_size": 10162,
+  "test_samples": 2033,
+  "trained_at": "2026-08-29 12:05:57",
+  "metrics": {
+    "accuracy": 0.9685,
+    "precision": 0.9544,
+    "recall": 0.8913,
+    "f1_score": 0.9218,
+    "confusion_matrix": [
+      [
+        1592,
+        18
+      ],
+      [
+        46,
+        377
+      ]
+    ]
+  },
+  "top_spam_keywords": [
+    "subject",
+    "http",
+    "mobile",
+    "\u00bd1",
+    "claim",
+    "uk",
+    "2004",
+    "txt",
+    "info",
+    "150p",
+    "www",
+    "reply",
+    "new",
+    "paliourg",
+    "prize",
+    "ringtone",
+    "urgent",
+    "meds",
+    "remove",
+    "dating",
+    "stop",
+    "50",
+    "win",
+    "best",
+    "min",
+    "0800",
+    "condition",
+    "hot",
+    "prices",
+    "rate"
+  ]
+}
