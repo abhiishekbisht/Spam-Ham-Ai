@@ -183,7 +183,8 @@ async def trigger_training(background_tasks: BackgroundTasks):
 
 if __name__ == "__main__":
     host = os.getenv("APP_HOST", "0.0.0.0")
-    port = int(os.getenv("APP_PORT", 8080))
-    app_run("app:app", host=host, port=port, reload=True)
+    port = int(os.getenv("PORT", os.getenv("APP_PORT", 8080)))
+    reload_mode = os.getenv("RELOAD", "false").lower() in ("true", "1")
+    app_run("app:app", host=host, port=port, reload=reload_mode)
 
     
