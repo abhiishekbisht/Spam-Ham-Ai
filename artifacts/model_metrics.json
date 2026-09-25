@@ -2,7 +2,7 @@
   "model_name": "LogisticRegression",
   "dataset_size": 10162,
   "test_samples": 2033,
-  "trained_at": "2026-08-29 12:05:57",
+  "trained_at": "2026-09-25 05:56:41",
   "metrics": {
     "accuracy": 0.9685,
     "precision": 0.9544,

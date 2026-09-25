@@ -64,6 +64,14 @@ class DetailedPredictionResponse(BaseModel):
 # Global pipeline instance
 pipeline = PredictionPipeline()
 
+@app.on_event("startup")
+async def startup_event():
+    try:
+        pipeline.get_trained_model()
+        print("✅ ML Model pipeline initialized and ready for inference.")
+    except Exception as e:
+        print(f"⚠️ Startup model initialization warning: {e}")
+
 # WEB ROUTES
 @app.get("/", response_class=HTMLResponse)
 async def home_page(request: Request):
@@ -108,7 +116,10 @@ async def health_check():
 async def api_predict_single(payload: SinglePredictRequest):
     if not payload.text or not payload.text.strip():
         raise HTTPException(status_code=400, detail="Input text cannot be empty.")
-    return pipeline.predict_detailed(payload.text)
+    try:
+        return pipeline.predict_detailed(payload.text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction pipeline error: {str(e)}")
 
 @app.post("/api/v1/predict-batch")
 async def api_predict_batch(payload: BatchPredictRequest):
